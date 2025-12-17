@@ -1,4 +1,5 @@
-use minifb::{Key, MouseButton, Window, WindowOptions};
+use minifb::{Key, KeyRepeat, MouseButton, Window, WindowOptions};
+use std::time::{Duration, Instant};
 
 
 const BLACK: u32 = 0x000000;
@@ -12,8 +13,8 @@ const ORANGE: u32 = 0xFFA500;
 const PURPLE: u32 = 0x800080;
 
 // --- 常量定義 ---
-const WIDTH: usize = 200;
-const HEIGHT: usize = 400;
+const WIDTH: usize = 300;
+const HEIGHT: usize = 500;
 const BLOCK_SIZE: i32 = 20; // Tetris 方塊的像素大小
 const LOCK_DELAY:i32 = 1;
 
@@ -341,6 +342,73 @@ fn draw_board(buffer:&mut [u32], b:&Board) {
     }
 }
 
+
+
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum MoveStat {NPRESS, PRESS}
+struct Move {
+    key: minifb::Key,
+    last_record_time: Option<Instant>,
+    state: MoveStat,
+}
+
+impl Move {
+
+    fn new(key:minifb::Key) -> Self {
+        Move {
+            key, 
+            last_record_time:None,
+            state:MoveStat::NPRESS
+        }
+    }
+
+    fn do_move(&self, board:&Board, t:&Tetromino) -> Option<Tetromino> 
+    {
+        match self.key {
+            Key::Left => try_horizon(&board, &t, true),
+            Key::Right => try_horizon(&board, &t, false),
+            Key::Down => try_down(&board, &t),
+            Key::LeftCtrl => rotate_with_kick(&board,&t),
+            _ => None
+        }
+    }
+
+    fn update(&mut self, press:bool, board:&Board, t:&Tetromino) -> Option<Tetromino> 
+    {
+        if press == false {
+            self.last_record_time = None;
+            self.state = MoveStat::NPRESS;
+            return None;
+        }
+
+        // first time we press
+        let now = Instant::now();
+        if self.state == MoveStat::NPRESS {
+            self.last_record_time = Some(now);
+            self.state = MoveStat::PRESS;
+            return self.do_move(board, t);
+        }
+
+        // de-bounce + DAS
+        let move_delay = 
+        if self.key == Key::Left || self.key == Key::Right {
+            // DAS & ARR 
+            Duration::from_millis(80)
+        } else {
+            Duration::from_millis(200)
+        };
+
+        let press_pass = self.last_record_time.map_or(false, |t| now.duration_since(t) > move_delay);
+        if press_pass == false {
+            return None;
+        }
+        self.last_record_time = Some(now);
+        self.do_move(board, t)
+    }
+
+}
+
+
 // --- 遊戲主邏輯 ---
 fn main() {
 
@@ -360,98 +428,24 @@ fn main() {
 
 
     // 設置更新速率，限制為約 60 FPS
-    window.set_target_fps(100); 
+    window.set_target_fps(1000); 
 
 
 
     let mut current_tetris = create_new_tetris();
     let mut board = Board::new(WIDTH as i32 / BLOCK_SIZE, HEIGHT as i32 / BLOCK_SIZE);
 
-
-    // let mut lock_time = None;
-    // 3. 遊戲主迴圈
-    // 只要視窗開啟且 ESC 鍵沒有被按下，迴圈就持續執行
-
-    let mut press_time:i32 = 0;
-    let mut lastKey:Option<minifb::Key> = None;
     let mut gravity = 0;
     let mut score = 0;
+
+    let mut moves: Vec<_> = vec![Move::new(Key::Down), Move::new(Key::LeftCtrl), Move::new(Key::Left), Move::new(Key::Right)];
+    // let mut last_key = None;
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        
-        let mut curKey = None;
-        if window.is_key_down(Key::Left) {
-            curKey = Some(Key::Left);
-        }
-        if window.is_key_down(Key::Right) {
-            curKey = Some(Key::Right);
-        }
-        if window.is_key_down(Key::LeftCtrl) {
-            curKey = Some(Key::LeftCtrl);
-        }
-        if window.is_key_down(Key::Space) {
-            curKey = Some(Key::Space);
-            loop {
-                if let Some(next_tetris) = try_down(&board, &current_tetris) {
-                    current_tetris = next_tetris;
-                } else {
-                    break;
-                }
-            }
-        }
 
-        // de-bounce.
-        if lastKey != curKey {
-            press_time = 0;
-            // current_tetris = match curKey {
-            //     Some(Key::Left) => try_horizon(&board, &current_tetris, true).unwrap_or(current_tetris),
-            //     Some(Key::Right) => try_horizon(&board, &current_tetris, false).unwrap_or(current_tetris),
-            //     Some(Key::LeftCtrl) => rotate_with_kick(&board,&current_tetris).unwrap_or(current_tetris),
-            //     _ => current_tetris
-            // };
-        } else if curKey != None {
-            if press_time < 10 {
-                press_time += 1;
-            } else {
-                press_time = 0;
-                current_tetris = match curKey {
-                    Some(Key::Left) => try_horizon(&board, &current_tetris, true).unwrap_or(current_tetris),
-                    Some(Key::Right) => try_horizon(&board, &current_tetris, false).unwrap_or(current_tetris),
-                    Some(Key::LeftCtrl) => rotate_with_kick(&board,&current_tetris).unwrap_or(current_tetris),
-                    _ => current_tetris
-                };
-            }
+        let is_pressed:Vec<bool> = vec![window.is_key_down(Key::Down), window.is_key_down(Key::LeftCtrl), window.is_key_down(Key::Left), window.is_key_down(Key::Right)];
+        for i in 0..4 {
+            current_tetris = moves[i].update(is_pressed[i], &board, &current_tetris).unwrap_or(current_tetris);
         }
-        lastKey = curKey;
-
-
-        if gravity == 50 {
-            //draw_board
-            if let Some(next_tetris) = try_down(&board, &current_tetris) {
-                // real pos
-                // for pos in next_tetris.world_cells(1) {
-                //     print!("{:?} ", pos);
-                // }
-                // println!();
-                current_tetris = next_tetris;
-            } else { // if I enter here, means I touch the ground or existing tetromino
-                for pos in current_tetris.world_cells() {
-                    print!("{:?} ", pos);
-                }
-                println!("collision ");
-                // temporary place immediately
-                if board.try_place(&current_tetris) {
-                    // do a clear check here
-                    score += board.check_clear();
-
-                    println!("place pos = {:?}, score={score}", current_tetris.pos);
-                    current_tetris = create_new_tetris();
-                } else {
-                    println!("error");
-                    panic!("error place")
-                }
-            }
-        }
-        gravity = (gravity + 1)%51;
         buffer.fill(BLACK); // 設為黑色 
         draw_board(&mut buffer, &board);
         draw_tertromino(&mut buffer, &current_tetris);
