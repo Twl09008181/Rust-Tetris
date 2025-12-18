@@ -16,7 +16,7 @@ const PURPLE: u32 = 0x800080;
 const WIDTH: usize = 300;
 const HEIGHT: usize = 500;
 const BLOCK_SIZE: i32 = 20; // Tetris 方塊的像素大小
-const LOCK_DELAY:i32 = 1;
+const LOCK_DELAY:Duration = Duration::from_millis(500);
 
 // --- 輔助函數：繪製單一方塊 ---
 // 將一個 BLOCK_SIZE x BLOCK_SIZE 的方塊，繪製到緩衝區的 (x, y) 座標
@@ -344,108 +344,223 @@ fn draw_board(buffer:&mut [u32], b:&Board) {
 
 
 
+// #[derive(PartialEq, Eq, Clone, Copy)]
+// enum MoveStat {NPRESS, PRESS}
+// struct Move {
+//     key: minifb::Key,
+//     last_record_time: Option<Instant>,
+//     state: MoveStat,
+// }
+
+// impl Move {
+
+//     fn new(key:minifb::Key) -> Self {
+//         Move {
+//             key, 
+//             last_record_time:None,
+//             state:MoveStat::NPRESS
+//         }
+//     }
+
+//     fn do_move(&self, board:&Board, t:&Tetromino) -> Option<Tetromino> 
+//     {
+//         match self.key {
+//             Key::Left => try_horizon(&board, &t, true),
+//             Key::Right => try_horizon(&board, &t, false),
+//             Key::Down => try_down(&board, &t),
+//             Key::LeftCtrl => rotate_with_kick(&board,&t),
+//             _ => None
+//         }
+//     }
+
+//     fn update(&mut self, press:bool, board:&Board, t:&Tetromino) -> Option<Tetromino> 
+//     {
+//         if press == false {
+//             self.last_record_time = None;
+//             self.state = MoveStat::NPRESS;
+//             return None;
+//         }
+
+//         // first time we press
+//         let now = Instant::now();
+//         if self.state == MoveStat::NPRESS {
+//             self.last_record_time = Some(now);
+//             self.state = MoveStat::PRESS;
+//             return self.do_move(board, t);
+//         }
+
+//         // de-bounce + DAS
+//         let move_delay = 
+//         if self.key == Key::Left || self.key == Key::Right {
+//             // DAS & ARR 
+//             Duration::from_millis(80)
+//         } else {
+//             Duration::from_millis(200)
+//         };
+
+//         let press_pass = self.last_record_time.map_or(false, |t| now.duration_since(t) > move_delay);
+//         if press_pass == false {
+//             return None;
+//         }
+//         self.last_record_time = Some(now);
+//         self.do_move(board, t)
+//     }
+
+// }
+
+
+// struct InputController {
+
+
+
+// }
+
+
+
 #[derive(PartialEq, Eq, Clone, Copy)]
-enum MoveStat {NPRESS, PRESS}
-struct Move {
-    key: minifb::Key,
-    last_record_time: Option<Instant>,
-    state: MoveStat,
-}
+enum KeyState {NPRESS, PRESS, DAS}
 
-impl Move {
-
-    fn new(key:minifb::Key) -> Self {
-        Move {
-            key, 
-            last_record_time:None,
-            state:MoveStat::NPRESS
-        }
-    }
-
-    fn do_move(&self, board:&Board, t:&Tetromino) -> Option<Tetromino> 
-    {
-        match self.key {
-            Key::Left => try_horizon(&board, &t, true),
-            Key::Right => try_horizon(&board, &t, false),
-            Key::Down => try_down(&board, &t),
-            Key::LeftCtrl => rotate_with_kick(&board,&t),
-            _ => None
-        }
-    }
-
-    fn update(&mut self, press:bool, board:&Board, t:&Tetromino) -> Option<Tetromino> 
-    {
-        if press == false {
-            self.last_record_time = None;
-            self.state = MoveStat::NPRESS;
-            return None;
-        }
-
-        // first time we press
-        let now = Instant::now();
-        if self.state == MoveStat::NPRESS {
-            self.last_record_time = Some(now);
-            self.state = MoveStat::PRESS;
-            return self.do_move(board, t);
-        }
-
-        // de-bounce + DAS
-        let move_delay = 
-        if self.key == Key::Left || self.key == Key::Right {
-            // DAS & ARR 
-            Duration::from_millis(80)
-        } else {
-            Duration::from_millis(200)
-        };
-
-        let press_pass = self.last_record_time.map_or(false, |t| now.duration_since(t) > move_delay);
-        if press_pass == false {
-            return None;
-        }
-        self.last_record_time = Some(now);
-        self.do_move(board, t)
-    }
-
+#[derive(Clone, Copy)]
+struct MotionConfig {
+    das_delay: Duration,
+    arr: Duration,
 }
 
 
-// --- 遊戲主邏輯 ---
+#[derive(Clone, Copy)]
+struct MotionState {
+    key_state : KeyState,
+    last_time : Option<Instant>,
+    config: MotionConfig,
+}
+impl MotionState {
+    fn new(das_delay:u64, arr:u64) -> Self {
+        Self {
+            key_state : KeyState::NPRESS,
+            last_time: None,
+            config: MotionConfig {das_delay:Duration::from_millis(das_delay), arr:Duration::from_millis(arr)}
+        }
+    }
+
+    fn update(&mut self, is_pressed:bool, current_time: Instant) -> bool
+    {
+        if !is_pressed {
+            self.key_state = KeyState::NPRESS;
+            self.last_time = None;
+            return false;
+        }
+
+        match self.key_state {
+            KeyState::NPRESS => {
+                self.key_state = KeyState::PRESS;
+                self.last_time = Some(current_time);
+                true
+            },
+            KeyState::PRESS => {
+                if let Some(last_time) = self.last_time {
+                    if current_time.duration_since(last_time) > self.config.das_delay {
+                        self.last_time = Some(current_time);
+                        self.key_state = KeyState::DAS;
+                        return true;
+                    }
+                }
+                false
+            },
+            KeyState::DAS => {
+                if let Some(last_time) = self.last_time {
+                    if current_time.duration_since(last_time) > self.config.arr {
+                        self.last_time = Some(current_time);
+                        return true;
+                    }
+                }
+                false
+            }}
+    }
+}
+
+struct ConstMotion {
+    impl_motion : MotionState,
+}
+
+impl ConstMotion {
+    fn new(delay:u64) -> Self {
+        Self {
+            impl_motion: MotionState::new(delay, delay)
+        }
+    }
+    fn update(&mut self, current_time: Instant) -> bool {
+        self.impl_motion.update(true, current_time)
+    }
+}
+
 fn main() {
 
-    // 1. 設置緩衝區 (所有像素設為 0x000000 黑色)
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
 
-    // 2. 創建視窗
     let mut window = Window::new(
-        "Rust Tetris - 移動測試 (ESC 鍵退出)",
+        "Rust Tetris",
         WIDTH,
         HEIGHT,
         WindowOptions::default(),
     )
     .unwrap_or_else(|e| {
-        panic!("視窗創建失敗: {}", e);
+        panic!("window creation fail: {}", e);
     });
 
 
     // 設置更新速率，限制為約 60 FPS
     window.set_target_fps(1000); 
 
-
-
     let mut current_tetris = create_new_tetris();
     let mut board = Board::new(WIDTH as i32 / BLOCK_SIZE, HEIGHT as i32 / BLOCK_SIZE);
 
-    let mut gravity = 0;
-    let mut score = 0;
+    let mut motions = vec![MotionState::new(120, 30), MotionState::new(120, 30), MotionState::new(120, 120), MotionState::new(999999, 9999999)];
 
-    let mut moves: Vec<_> = vec![Move::new(Key::Down), Move::new(Key::LeftCtrl), Move::new(Key::Left), Move::new(Key::Right)];
-    // let mut last_key = None;
+    let keys = vec![Key::Left, Key::Right, Key::Down, Key::LeftCtrl];
+
+    let mut gravity = ConstMotion::new(500);
+    let mut lock_time = None;
     while window.is_open() && !window.is_key_down(Key::Escape) {
-
-        let is_pressed:Vec<bool> = vec![window.is_key_down(Key::Down), window.is_key_down(Key::LeftCtrl), window.is_key_down(Key::Left), window.is_key_down(Key::Right)];
-        for i in 0..4 {
-            current_tetris = moves[i].update(is_pressed[i], &board, &current_tetris).unwrap_or(current_tetris);
+        let now = Instant::now();
+        for (&key, motion) in keys.iter().zip(motions.iter_mut()) {
+            let do_move = motion.update(window.is_key_down(key), now);
+            if do_move {
+                current_tetris = match key {
+                    Key::Left => try_horizon(&board, &current_tetris, true).unwrap_or(current_tetris),
+                    Key::Right => try_horizon(&board, &current_tetris, false).unwrap_or(current_tetris),
+                    Key::Down => try_down(&board, &current_tetris).unwrap_or(current_tetris),
+                    Key::LeftCtrl => rotate_with_kick(&board,&current_tetris).unwrap_or(current_tetris),
+                    _ => current_tetris,
+                };
+            }
         }
+
+
+
+        let can_drop = try_down(&board, &current_tetris).is_some();
+        if can_drop {
+            lock_time = None;
+            if gravity.update(now) {
+                if let Some(next_tetris) = try_down(&board, &current_tetris) {
+                    current_tetris = next_tetris;
+                }
+            }
+        } else {
+            match lock_time {
+                None => {
+                    lock_time = Some(now);
+                },
+                Some(t) => {
+                    if now.duration_since(t) > LOCK_DELAY {
+                        if board.try_place(&current_tetris) {
+                            current_tetris = create_new_tetris();
+                        }
+                        lock_time = None;
+                    }
+                }
+            }
+        }
+
         buffer.fill(BLACK); // 設為黑色 
         draw_board(&mut buffer, &board);
         draw_tertromino(&mut buffer, &current_tetris);
