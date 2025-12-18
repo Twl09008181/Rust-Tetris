@@ -1,5 +1,9 @@
 use minifb::{Key, KeyRepeat, MouseButton, Window, WindowOptions};
 use std::time::{Duration, Instant};
+mod input; // 宣告使用 input.rs
+mod game;
+use input::{ConstMotion, MotionState, LockMgr};
+
 
 
 const BLACK: u32 = 0x000000;
@@ -344,155 +348,6 @@ fn draw_board(buffer:&mut [u32], b:&Board) {
 
 
 
-// #[derive(PartialEq, Eq, Clone, Copy)]
-// enum MoveStat {NPRESS, PRESS}
-// struct Move {
-//     key: minifb::Key,
-//     last_record_time: Option<Instant>,
-//     state: MoveStat,
-// }
-
-// impl Move {
-
-//     fn new(key:minifb::Key) -> Self {
-//         Move {
-//             key, 
-//             last_record_time:None,
-//             state:MoveStat::NPRESS
-//         }
-//     }
-
-//     fn do_move(&self, board:&Board, t:&Tetromino) -> Option<Tetromino> 
-//     {
-//         match self.key {
-//             Key::Left => try_horizon(&board, &t, true),
-//             Key::Right => try_horizon(&board, &t, false),
-//             Key::Down => try_down(&board, &t),
-//             Key::LeftCtrl => rotate_with_kick(&board,&t),
-//             _ => None
-//         }
-//     }
-
-//     fn update(&mut self, press:bool, board:&Board, t:&Tetromino) -> Option<Tetromino> 
-//     {
-//         if press == false {
-//             self.last_record_time = None;
-//             self.state = MoveStat::NPRESS;
-//             return None;
-//         }
-
-//         // first time we press
-//         let now = Instant::now();
-//         if self.state == MoveStat::NPRESS {
-//             self.last_record_time = Some(now);
-//             self.state = MoveStat::PRESS;
-//             return self.do_move(board, t);
-//         }
-
-//         // de-bounce + DAS
-//         let move_delay = 
-//         if self.key == Key::Left || self.key == Key::Right {
-//             // DAS & ARR 
-//             Duration::from_millis(80)
-//         } else {
-//             Duration::from_millis(200)
-//         };
-
-//         let press_pass = self.last_record_time.map_or(false, |t| now.duration_since(t) > move_delay);
-//         if press_pass == false {
-//             return None;
-//         }
-//         self.last_record_time = Some(now);
-//         self.do_move(board, t)
-//     }
-
-// }
-
-
-// struct InputController {
-
-
-
-// }
-
-
-
-#[derive(PartialEq, Eq, Clone, Copy)]
-enum KeyState {NPRESS, PRESS, DAS}
-
-#[derive(Clone, Copy)]
-struct MotionConfig {
-    das_delay: Duration,
-    arr: Duration,
-}
-
-
-#[derive(Clone, Copy)]
-struct MotionState {
-    key_state : KeyState,
-    last_time : Option<Instant>,
-    config: MotionConfig,
-}
-impl MotionState {
-    fn new(das_delay:u64, arr:u64) -> Self {
-        Self {
-            key_state : KeyState::NPRESS,
-            last_time: None,
-            config: MotionConfig {das_delay:Duration::from_millis(das_delay), arr:Duration::from_millis(arr)}
-        }
-    }
-
-    fn update(&mut self, is_pressed:bool, current_time: Instant) -> bool
-    {
-        if !is_pressed {
-            self.key_state = KeyState::NPRESS;
-            self.last_time = None;
-            return false;
-        }
-
-        match self.key_state {
-            KeyState::NPRESS => {
-                self.key_state = KeyState::PRESS;
-                self.last_time = Some(current_time);
-                true
-            },
-            KeyState::PRESS => {
-                if let Some(last_time) = self.last_time {
-                    if current_time.duration_since(last_time) > self.config.das_delay {
-                        self.last_time = Some(current_time);
-                        self.key_state = KeyState::DAS;
-                        return true;
-                    }
-                }
-                false
-            },
-            KeyState::DAS => {
-                if let Some(last_time) = self.last_time {
-                    if current_time.duration_since(last_time) > self.config.arr {
-                        self.last_time = Some(current_time);
-                        return true;
-                    }
-                }
-                false
-            }}
-    }
-}
-
-struct ConstMotion {
-    impl_motion : MotionState,
-}
-
-impl ConstMotion {
-    fn new(delay:u64) -> Self {
-        Self {
-            impl_motion: MotionState::new(delay, delay)
-        }
-    }
-    fn update(&mut self, current_time: Instant) -> bool {
-        self.impl_motion.update(true, current_time)
-    }
-}
-
 fn main() {
 
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
@@ -519,7 +374,9 @@ fn main() {
     let keys = vec![Key::Left, Key::Right, Key::Down, Key::LeftCtrl];
 
     let mut gravity = ConstMotion::new(500);
-    let mut lock_time = None;
+    // let mut lock_time = None;
+    let mut lock_mgr = LockMgr::new(500);
+
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
         for (&key, motion) in keys.iter().zip(motions.iter_mut()) {
@@ -535,31 +392,24 @@ fn main() {
             }
         }
 
-
-
-        let can_drop = try_down(&board, &current_tetris).is_some();
-        if can_drop {
-            lock_time = None;
+        if !try_down(&board, &current_tetris).is_some() {
+            lock_mgr.start_if_not(now);
+            if lock_mgr.lock(now) {
+                if board.try_place(&current_tetris) {
+                    current_tetris = create_new_tetris();
+                    lock_mgr.reset();
+                    gravity.reset(now);
+                }
+            }
+        } else {
+            lock_mgr.reset();
             if gravity.update(now) {
                 if let Some(next_tetris) = try_down(&board, &current_tetris) {
                     current_tetris = next_tetris;
                 }
             }
-        } else {
-            match lock_time {
-                None => {
-                    lock_time = Some(now);
-                },
-                Some(t) => {
-                    if now.duration_since(t) > LOCK_DELAY {
-                        if board.try_place(&current_tetris) {
-                            current_tetris = create_new_tetris();
-                        }
-                        lock_time = None;
-                    }
-                }
-            }
         }
+
 
         buffer.fill(BLACK); // 設為黑色 
         draw_board(&mut buffer, &board);
