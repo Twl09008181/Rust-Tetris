@@ -71,9 +71,9 @@ pub struct ConstMotion {
 }
 
 impl ConstMotion {
-    pub fn new(delay:u64) -> Self {
+    pub fn new(delay:u64, now:Instant) -> Self {
         Self {
-            impl_motion: MotionState { key_state: KeyState::PRESS, last_time: None, config: MotionConfig {das_delay: Duration::from_millis(delay), arr:Duration::from_millis(delay)}}
+            impl_motion: MotionState { key_state: KeyState::DAS, last_time: Some(now), config: MotionConfig {das_delay: Duration::from_millis(delay), arr:Duration::from_millis(delay)}}
         }
     }
     pub fn reset(&mut self, time:Instant) {
