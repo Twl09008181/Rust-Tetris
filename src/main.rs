@@ -130,43 +130,43 @@ impl Tetromino {
         use Rotation::*;
         match kind {
             I => match rot {
-                R0    => [Pos{x: -1, y:0}, Pos{x:0, y:0}, Pos{x:1, y:0}, Pos{x:2, y:0}],
-                R90   => [Pos{x:1, y:-1}, Pos{x:1, y:0}, Pos{x:1, y:1}, Pos{x:1, y:2}],
-                R180  => [Pos{x:-1, y:1}, Pos{x:0, y:1}, Pos{x:1, y:1}, Pos{x:2, y:1}],
-                R270  => [Pos{x:0, y:-1}, Pos{x:0, y:0}, Pos{x:0, y:1}, Pos{x:0, y:2}],
+                R0   => [Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:1, y:0}, Pos{x:2, y:0}],
+                R90  => [Pos{x:1, y:-1}, Pos{x:1, y:0}, Pos{x:1, y:1}, Pos{x:1, y:2}],
+                R180 => [Pos{x:-1, y:1}, Pos{x:0, y:1}, Pos{x:1, y:1}, Pos{x:2, y:1}],
+                R270 => [Pos{x:0, y:-1}, Pos{x:0, y:0}, Pos{x:0, y:1}, Pos{x:0, y:2}],
             },
-            O => { // O 塊通常不變形（偏移可視 engine 決定）
-                [Pos{x:0,y:0}, Pos{x:1,y:0}, Pos{x:0,y:1}, Pos{x:1,y:1}]
-            }
+            O => { // O 塊不隨旋轉改變座標
+                [Pos{x:0, y:0}, Pos{x:1, y:0}, Pos{x:0, y:1}, Pos{x:1, y:1}]
+            },
             T => match rot {
-                R0    => [Pos{x:-1,y:0}, Pos{x:0,y:0}, Pos{x:1,y:0}, Pos{x:0,y:1}],
-                R90   => [Pos{x:0,y:-1}, Pos{x:0,y:0}, Pos{x:0,y:1}, Pos{x:1,y:0}],
-                R180  => [Pos{x:-1,y:0}, Pos{x:0,y:0}, Pos{x:1,y:0}, Pos{x:0,y:-1}],
-                R270  => [Pos{x:0,y:-1}, Pos{x:0,y:0}, Pos{x:0,y:1}, Pos{x:-1,y:0}],
+                R0   => [Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:1, y:0}, Pos{x:0, y:-1}],
+                R90  => [Pos{x:0, y:-1}, Pos{x:0, y:0}, Pos{x:1, y:0}, Pos{x:0, y:1}],
+                R180 => [Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:1, y:0}, Pos{x:0, y:1}],
+                R270 => [Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:0, y:-1}, Pos{x:0, y:1}],
             },
             J => match rot {
-                R0    => [Pos{x:-1,y:0}, Pos{x:0,y:0}, Pos{x:1,y:0}, Pos{x:-1,y:1}],
-                R90   => [Pos{x:0,y:-1}, Pos{x:0,y:0}, Pos{x:0,y:1}, Pos{x:1,y:-1}],
-                R180  => [Pos{x:-1,y:0}, Pos{x:0,y:0}, Pos{x:1,y:0}, Pos{x:1,y:-1}],
-                R270  => [Pos{x:0,y:-1}, Pos{x:0,y:0}, Pos{x:0,y:1}, Pos{x:-1,y:1}],
+                R0   => [Pos{x:-1, y:-1}, Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:1, y:0}],
+                R90  => [Pos{x:0, y:-1}, Pos{x:1, y:-1}, Pos{x:0, y:0}, Pos{x:0, y:1}],
+                R180 => [Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:1, y:0}, Pos{x:1, y:1}],
+                R270 => [Pos{x:0, y:-1}, Pos{x:0, y:0}, Pos{x:0, y:1}, Pos{x:-1, y:1}],
             },
             L => match rot {
-                R0    => [Pos{x:-1,y:0}, Pos{x:0,y:0}, Pos{x:1,y:0}, Pos{x:1,y:1}],
-                R90   => [Pos{x:0,y:-1}, Pos{x:0,y:0}, Pos{x:0,y:1}, Pos{x:1,y:1}],
-                R180  => [Pos{x:-1,y:0}, Pos{x:0,y:0}, Pos{x:1,y:0}, Pos{x:-1,y:-1}],
-                R270  => [Pos{x:0,y:-1}, Pos{x:0,y:0}, Pos{x:0,y:1}, Pos{x:-1,y:-1}],
+                R0   => [Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:1, y:0}, Pos{x:1, y:-1}],
+                R90  => [Pos{x:0, y:-1}, Pos{x:0, y:0}, Pos{x:0, y:1}, Pos{x:1, y:1}],
+                R180 => [Pos{x:-1, y:1}, Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:1, y:0}],
+                R270 => [Pos{x:-1, y:-1}, Pos{x:0, y:-1}, Pos{x:0, y:0}, Pos{x:0, y:1}],
             },
             S => match rot {
-                R0    => [Pos{x:-1,y:0}, Pos{x:0,y:0}, Pos{x:0,y:1}, Pos{x:1,y:1}],
-                R90   => [Pos{x:0,y:-1}, Pos{x:0,y:0}, Pos{x:1,y:0}, Pos{x:1,y:1}],
-                R180  => [Pos{x:-1,y:-1}, Pos{x:0,y:-1}, Pos{x:0,y:0}, Pos{x:1,y:0}],
-                R270  => [Pos{x:-1,y:-1}, Pos{x:-1,y:0}, Pos{x:0,y:0}, Pos{x:0,y:1}],
+                R0   => [Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:0, y:-1}, Pos{x:1, y:-1}],
+                R90  => [Pos{x:0, y:-1}, Pos{x:0, y:0}, Pos{x:1, y:0}, Pos{x:1, y:1}],
+                R180 => [Pos{x:-1, y:1}, Pos{x:0, y:1}, Pos{x:0, y:0}, Pos{x:1, y:0}],
+                R270 => [Pos{x:-1, y:-1}, Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:0, y:1}],
             },
             Z => match rot {
-                R0    => [Pos{x:-1,y:1}, Pos{x:0,y:1}, Pos{x:0,y:0}, Pos{x:1,y:0}],
-                R90   => [Pos{x:1,y:-1}, Pos{x:1,y:0}, Pos{x:0,y:0}, Pos{x:0,y:1}],
-                R180  => [Pos{x:-1,y:0}, Pos{x:0,y:0}, Pos{x:0,y:-1}, Pos{x:1,y:-1}],
-                R270  => [Pos{x:0,y:-1}, Pos{x:0,y:0}, Pos{x:-1,y:0}, Pos{x:-1,y:1}],
+                R0   => [Pos{x:-1, y:-1}, Pos{x:0, y:-1}, Pos{x:0, y:0}, Pos{x:1, y:0}],
+                R90  => [Pos{x:1, y:-1}, Pos{x:1, y:0}, Pos{x:0, y:0}, Pos{x:0, y:1}],
+                R180 => [Pos{x:-1, y:0}, Pos{x:0, y:0}, Pos{x:0, y:1}, Pos{x:1, y:1}],
+                R270 => [Pos{x:0, y:-1}, Pos{x:0, y:0}, Pos{x:-1, y:0}, Pos{x:-1, y:1}],
             },
         }
     }
@@ -373,7 +373,7 @@ fn main() {
 
     let keys = vec![Key::Left, Key::Right, Key::Down, Key::LeftCtrl];
 
-    let mut gravity = ConstMotion::new(500);
+    let mut gravity = ConstMotion::new(500, Instant::now());
     // let mut lock_time = None;
     let mut lock_mgr = LockMgr::new(500);
 
