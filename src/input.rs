@@ -29,6 +29,10 @@ impl MotionState {
     pub fn reset_last(&mut self, time:Instant) {
         self.last_time = Some(time);
     }
+    pub fn reset_all(&mut self) {
+        self.key_state = KeyState::NPRESS;
+        self.last_time = None;
+    }
 
     pub fn update(&mut self, is_pressed:bool, current_time: Instant) -> bool
     {

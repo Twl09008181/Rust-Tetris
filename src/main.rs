@@ -1,4 +1,5 @@
 use minifb::{Key, KeyRepeat, MouseButton, Window, WindowOptions};
+use std::thread::sleep;
 use std::time::{Duration, Instant};
 mod input; // 宣告使用 input.rs
 mod game;
@@ -113,6 +114,8 @@ impl Mul<i32> for Pos {
         }
     }
 }
+
+#[derive(Clone, Copy)]
 struct Tetromino {
     kind: TetrominoKind,
     pos: Pos,
@@ -217,26 +220,29 @@ impl Board {
 
     pub fn check_clear(&mut self) -> usize {
 
-        let mut clear_row = vec!();
-        for row in 0..self.height {
+        let mut ret = 0;
+        let mut cur_row = self.height - 1;
+        let mut new_board = vec![None; (self.width*self.height) as usize];
 
-            let mut good = true;
+        for row in (0..self.height).rev() {
+            let mut do_clear = true;
             for col in 0..self.width {
                 if self.cells[ (row * self.width + col) as usize ] == None {
-                    good = false;
+                    do_clear = false;
                     break;
                 }
             }
-            if good {
-                clear_row.push(row);
+            if !do_clear {
+                for col in 0..self.width {
+                    new_board[(cur_row * self.width + col) as usize] = self.cells[(row * self.width + col) as usize];
+                }
+                cur_row -= 1;
+            } else {
+                ret += 1;
             }
         }
-        for row in &clear_row {
-            for col in 0..self.width {
-                self.set_occupied(Pos{x:col, y:*row}, None);
-            }
-        }
-        clear_row.len()
+        self.cells = new_board;
+        ret
     }
 
     pub fn can_place(&self, t:&Tetromino) -> bool {
@@ -292,6 +298,18 @@ fn try_down(board:&Board, t:&Tetromino) -> Option<Tetromino>
     if board.can_place(&t2) {Some(t2)} else {None}
 }
 
+fn try_hard_drop(board:&Board, t:&Tetromino) -> Option<Tetromino> 
+{
+    let mut current_tetris = t.clone();
+    loop {
+        if let Some(next_tetris) = try_down(&board, &current_tetris) {
+            current_tetris = next_tetris;
+        } else {
+            break Some(current_tetris)
+        }
+    }
+}
+
 fn try_horizon(board:&Board, t:&Tetromino, is_left:bool) -> Option<Tetromino>
 {
 
@@ -299,16 +317,6 @@ fn try_horizon(board:&Board, t:&Tetromino, is_left:bool) -> Option<Tetromino>
     let t2 = Tetromino { kind: t.kind, pos: t.pos + d, rot: t.rot };
     if board.can_place(&t2) {Some(t2)} else {None}
 }
-
-
-// fn main() {
-//     let t = Tetromino::new(TetrominoKind::I,Pos{x:0, y:0});
-//     let mut b = Board::new(10, 10);
-//     if let Some(res) = rotate_with_kick(&b, &t) {
-//         b.try_place(&res);
-//         b.show();
-//     }
-// }
 
 
 
@@ -327,12 +335,18 @@ fn create_new_tetris() -> Tetromino
         5 => TetrominoKind::S,
         _ => TetrominoKind::Z,
     };
-    Tetromino::new(shape, Pos{x:WIDTH as i32 / 2 / BLOCK_SIZE, y:0})
+    Tetromino::new(shape, Pos{x:WIDTH as i32 / 2 / BLOCK_SIZE, y:1})
 }
 
 fn draw_tertromino(buffer:&mut [u32], t:&Tetromino) {
     for pos in t.world_cells() {
         draw_square(buffer, pos.x * BLOCK_SIZE , pos.y * BLOCK_SIZE , t.kind.color());
+    }
+}
+
+fn draw_tertromino_with_color(buffer:&mut [u32], t:&Tetromino, color:u32) {
+    for pos in t.world_cells() {
+        draw_square(buffer, pos.x * BLOCK_SIZE , pos.y * BLOCK_SIZE , color);
     }
 }
 
@@ -364,24 +378,35 @@ fn main() {
 
 
     // 設置更新速率，限制為約 60 FPS
-    window.set_target_fps(1000); 
+    window.set_target_fps(60); 
 
     let mut current_tetris = create_new_tetris();
     let mut board = Board::new(WIDTH as i32 / BLOCK_SIZE, HEIGHT as i32 / BLOCK_SIZE);
 
-    let mut motions = vec![MotionState::new(120, 30), MotionState::new(120, 30), MotionState::new(120, 120), MotionState::new(999999, 9999999)];
+    let mut motions = vec![MotionState::new(120, 80), MotionState::new(120, 80), MotionState::new(120, 120), MotionState::new(999999, 9999999)];
+    let mut debounce_hard_drop = MotionState::new(9999999, 9999999);
 
     let keys = vec![Key::Left, Key::Right, Key::Down, Key::LeftCtrl];
-
     let mut gravity = ConstMotion::new(500, Instant::now());
     // let mut lock_time = None;
     let mut lock_mgr = LockMgr::new(500);
-
+    let mut score = 0;
+    let mut shadow = None;
+    let mut game_over = false;
     while window.is_open() && !window.is_key_down(Key::Escape) {
+
+        if game_over {
+            window.update(); // otherwise I cannot read the Escape
+            continue;
+        }
+
         let now = Instant::now();
+
+        let mut move_happen = false;
         for (&key, motion) in keys.iter().zip(motions.iter_mut()) {
             let do_move = motion.update(window.is_key_down(key), now);
             if do_move {
+                move_happen = true;
                 current_tetris = match key {
                     Key::Left => try_horizon(&board, &current_tetris, true).unwrap_or(current_tetris),
                     Key::Right => try_horizon(&board, &current_tetris, false).unwrap_or(current_tetris),
@@ -392,16 +417,27 @@ fn main() {
             }
         }
 
-        if !try_down(&board, &current_tetris).is_some() {
+        // move hard frop out of the key-loop to avoid drop then move. 
+        let mut is_hard_drop_press = false;
+        if debounce_hard_drop.update(window.is_key_down(Key::Space) , now) {
+            current_tetris = try_hard_drop(&board, &current_tetris).unwrap_or(current_tetris);
+            is_hard_drop_press = true;
+        }
+
+        let mut placed = false;
+
+        if is_hard_drop_press || !try_down(&board, &current_tetris).is_some() { // lock
             lock_mgr.start_if_not(now);
-            if lock_mgr.lock(now) {
+            if is_hard_drop_press || lock_mgr.lock(now) {
                 if board.try_place(&current_tetris) {
-                    current_tetris = create_new_tetris();
-                    lock_mgr.reset();
-                    gravity.reset(now);
+                    score += board.check_clear();
+                    println!("score={score}");
+                    placed = true;
+                } else {
+                    game_over = true;
                 }
             }
-        } else {
+        } else { // gravity
             lock_mgr.reset();
             if gravity.update(now) {
                 if let Some(next_tetris) = try_down(&board, &current_tetris) {
@@ -411,9 +447,30 @@ fn main() {
         }
 
 
+        // to save time, only update when move_happen and don't generate shadow for hard_drop
+        shadow = if move_happen && !is_hard_drop_press {
+            try_hard_drop(&board, &current_tetris)
+        } else {
+            shadow
+        };
+
         buffer.fill(BLACK); // 設為黑色 
         draw_board(&mut buffer, &board);
+        // draw shadow first
+        if let Some(shadow) = shadow {
+            draw_tertromino_with_color(&mut buffer, &shadow, 0x444444);
+        }
         draw_tertromino(&mut buffer, &current_tetris);
+
+        if placed {
+            current_tetris = create_new_tetris();
+            shadow = try_hard_drop(&board, &current_tetris);
+            lock_mgr.reset();
+            gravity.reset(now);
+            for motion in motions.iter_mut() {
+                motion.reset_all();
+            }
+        }
         window
             .update_with_buffer(&buffer, WIDTH, HEIGHT)
             .unwrap();
