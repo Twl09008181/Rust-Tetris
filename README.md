@@ -23,18 +23,18 @@ MotionState: Handles key debouncing and continuous movement logic.
 
 Board: Grid system with collision detection.
 
-## File Structure
-src/
-├── main.rs          # Entry point: handles 60FPS loop and minifb window
-├── lib.rs           # Crate Root: defines the module tree and public factory
-├── game.rs          # Core Logic: tetromino movement and shadow calculation
-└── input.rs         # (Private) Internal state machines for DAS/ARR and Lock Delay
+## File Structure    
+src/    
+├── main.rs          # Entry point: handles 60FPS loop and minifb window 
+├── lib.rs           # Crate Root: defines the module tree and public factory    
+├── game.rs          # Core Logic: tetromino movement and shadow calculation   
+└── input.rs         # (Private) Internal state machines for DAS/ARR and Lock Delay    
 
 
-## Control
-Key,Action
-Left / Right,Move (Supports DAS long-press for rapid shift)
-Down,Soft Drop
-Space,Hard Drop
-Left Ctrl,Rotate Piece
-Esc,Exit Game
+## Control  
+Key,Action   
+Left / Right,Move (Supports DAS long-press for rapid shift)   
+Down,Soft Drop   
+Space,Hard Drop   
+Left Ctrl,Rotate Piece  
+Esc,Exit Game  
