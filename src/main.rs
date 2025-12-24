@@ -1,29 +1,19 @@
-use minifb::{Key, KeyRepeat, MouseButton, Window, WindowOptions};
-use rand::rand_core::block::BlockRng;
-use std::time::{Duration, Instant};
-mod input; // 宣告使用 input.rs
-mod game;
-use input::{ConstMotion, MotionState, LockMgr};
-use game::{GameState, GameCommand, Tetromino, Board};
 
+// use is shortcut. the place we define the mod is in the lib.rs by using mod game and mod input
+use minifb::{Key, Window, WindowOptions};
+use std::time::{Instant};
+use tetris::game::{Board, GameCommand, Tetromino, create_new_game};
 
-
-const BLACK: u32 = 0x000000;
-const WHITE: u32 = 0xFFFFFF;
-const RED: u32   = 0xFF0000;
-const GREEN: u32 = 0x00FF00;
-const BLUE: u32  = 0x0000FF;
-const CYAN: u32  = 0x00FFFF;
-const YELLOW: u32 = 0xFFFF00;
-const ORANGE: u32 = 0xFFA500;
-const PURPLE: u32 = 0x800080;
+// mod	Definition / Loading. Tells Rust to look for a file and include it in the compilation tree.	The Foundation. "I have a room called game."	namespace game { ... } or adding a file to your CMake project.
+// pub	Visibility / Access. Determines if a module, function, or struct can be seen from the outside.	The Door Key. "This room is open to visitors."	public: in a class or a header file exposed in an API.
+// use	Aliasing / Shortcut. Brings a path into the current scope so you don't have to type the full name.	The Teleport. "Call 'the room in the back' just 'Kitchen'."
 
 
 // --- 常量定義 ---
+const BLACK: u32 = 0x000000;
 const WIDTH: usize = 300;
 const HEIGHT: usize = 500;
 const BLOCK_SIZE: i32 = 20; // Tetris 方塊的像素大小
-const LOCK_DELAY: u64 = 500;
 
 fn draw_tertromino(buffer:&mut [u32], t:&Tetromino) {
     for pos in t.world_cells() {
@@ -42,7 +32,7 @@ fn draw_board(buffer:&mut [u32], b:&Board) {
         for x in 0..b.width {
             if let Some(kind) = b.cells[(y * b.width + x) as usize] {
                 draw_square(buffer, x * BLOCK_SIZE, y * BLOCK_SIZE, kind.color());
-            } 
+            }
         }
     }
 }
@@ -87,13 +77,11 @@ fn main() {
     // 60fps update
     window.set_target_fps(60); 
 
-
-
     let keys = vec![Key::Left, Key::Right, Key::Down, Key::LeftCtrl, Key::Space];
 
 
     let mut game = 
-        GameState::new(WIDTH as i32 / BLOCK_SIZE, HEIGHT as i32 / BLOCK_SIZE, Instant::now());
+        create_new_game(WIDTH as i32 / BLOCK_SIZE, HEIGHT as i32 / BLOCK_SIZE, Instant::now());
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
 
@@ -118,10 +106,7 @@ fn main() {
             game.update(window.is_key_down(key), command, now);
         }
 
-
         let shadow = game.get_shadow();
-
-
         buffer.fill(BLACK); // clean all 
         draw_board(&mut buffer, &game.get_board());
         if let Some(shadow) = shadow {

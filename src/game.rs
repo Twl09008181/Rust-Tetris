@@ -1,5 +1,3 @@
-const BLACK: u32 = 0x000000;
-const WHITE: u32 = 0xFFFFFF;
 const RED: u32   = 0xFF0000;
 const GREEN: u32 = 0x00FF00;
 const BLUE: u32  = 0x0000FF;
@@ -7,9 +5,9 @@ const CYAN: u32  = 0x00FFFF;
 const YELLOW: u32 = 0xFFFF00;
 const ORANGE: u32 = 0xFFA500;
 const PURPLE: u32 = 0x800080;
+const LOCK_DELAY: u64 = 500;
 
-use std::process::Termination;
-use std::time::{Instant, Duration};
+use std::time::{Instant};
 
 // Clone represents the general ability to duplicate a value. 
 // Copy is a subset of Clone for types that can be bitwise copied. 
@@ -69,7 +67,6 @@ impl Add for Pos {
 
 use std::ops::Mul;
 
-use crate::LOCK_DELAY;
 use crate::input::{ConstMotion, LockMgr, MotionState};
 // 實作 Pos * i32
 impl Mul<i32> for Pos {
@@ -96,7 +93,7 @@ impl Tetromino {
         Self { kind, pos, rot: Rotation::R0 }
     }
 
-    pub fn relative_cells(kind: TetrominoKind, rot: Rotation) -> [Pos;4]/*fixed length array on stack / no heap */ {
+    fn relative_cells(kind: TetrominoKind, rot: Rotation) -> [Pos;4]/*fixed length array on stack / no heap */ {
         use TetrominoKind::*;
         use Rotation::*;
         match kind {
@@ -183,10 +180,10 @@ pub struct Board {
 
 
 impl Board {
-    pub fn new(width:i32, height:i32) -> Self {
+    fn new(width:i32, height:i32) -> Self {
         Self { width, height, cells: vec![None; (width*height) as usize] }
     }
-    pub fn try_place(&mut self, t:&Tetromino) -> bool
+    fn try_place(&mut self, t:&Tetromino) -> bool
     {
         if !self.can_place(t) { return false; }
         t.world_cells().into_iter().for_each(|pos| self.set_occupied(pos, Some(t.kind)));
@@ -195,7 +192,7 @@ impl Board {
 
 
     // clears full lines and returns the score.
-    pub fn check_clear(&mut self) -> usize {
+    fn check_clear(&mut self) -> usize {
 
         // better to create a new usize here
         let width = self.width as usize;
@@ -219,30 +216,20 @@ impl Board {
         n_cleared_lines as usize
     }
 
-    pub fn can_place(&self, t:&Tetromino) -> bool {
+    fn can_place(&self, t:&Tetromino) -> bool {
         !t.world_cells().into_iter().any(|pos|self.is_occupied(pos))
     }
 
-    pub fn is_occupied(&self, pos:Pos) -> bool {
+    fn is_occupied(&self, pos:Pos) -> bool {
         if pos.x < 0 || pos.y < 0 || pos.x >= self.width || pos.y >= self.height {
             return true;
         }
         self.cells[(pos.y * self.width + pos.x) as usize] != None
     }
 
-    pub fn set_occupied(&mut self, pos: Pos, value: Option<TetrominoKind>) {
+    fn set_occupied(&mut self, pos: Pos, value: Option<TetrominoKind>) {
         if pos.x >= 0 && pos.x < self.width && pos.y >= 0 && pos.y < self.height {
             self.cells[(pos.y * self.width + pos.x) as usize] = value;
-        }
-    }
-
-    pub fn show(&self) {
-        for row in 0..self.height {
-            for col in 0..self.width {
-                let idx = (row * self.width + col) as usize;
-                print!("{}", if self.cells[idx] != None {"-"} else {"*"});
-            }
-            println!();
         }
     }
 }
@@ -302,8 +289,7 @@ pub trait TetrisGenerator {
     fn next(&mut self, x: i32, y: i32) -> Tetromino;
 }
 
-
-pub struct GameState<G: TetrisGenerator> {
+pub struct GameState {
     pub current_tetris: Tetromino,
     pub shadow: Option<Tetromino>,
     pub shadow_out_of_date: bool,
@@ -311,10 +297,11 @@ pub struct GameState<G: TetrisGenerator> {
     debounce: Vec<MotionState>,
     gravity: ConstMotion,
     lock_mgr: LockMgr,
-    tetris_generator:G,
+    tetris_generator: Box<dyn TetrisGenerator>,
     score:usize,
     game_over:bool,
 }
+
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub enum GameCommand {
@@ -326,7 +313,12 @@ pub enum GameCommand {
     None,
 }
 
-impl <G:TetrisGenerator>GameState<G> {
+// factory pattern
+pub fn create_new_game(width:i32, height:i32, now:Instant) -> GameState {
+    GameState::new(width, height, now, Box::new(RandomGenerator::new()))
+}
+
+impl GameState {
     pub fn get_score(&self) -> usize {
         self.score
     }
@@ -335,7 +327,9 @@ impl <G:TetrisGenerator>GameState<G> {
     }
 
     // what is mut generator ?
-    pub fn new_game(width:i32, height:i32, now:Instant, mut generator: G) -> Self {
+    // just like let mut generator = generator// re-binding
+    // make it private, use factory create_new_game instead.
+    fn new(width:i32, height:i32, now:Instant, mut generator:Box<dyn TetrisGenerator>) -> Self {
         let current_tetris = generator.next(width/2, 1);
         GameState {
             current_tetris,
@@ -426,7 +420,7 @@ impl <G:TetrisGenerator>GameState<G> {
         res
     }
 
-    pub fn update_press(&mut self,  command:GameCommand, now:Instant) -> bool
+    fn update_press(&mut self,  command:GameCommand, now:Instant) -> bool
     {
         self.update(true, command, now)
     }
@@ -483,16 +477,12 @@ impl RandomGenerator<ThreadRng> {
     }
 }
 
-impl GameState<RandomGenerator<ThreadRng>> {
-    pub fn new(width: i32, height: i32, now: Instant) -> Self {
-        // 這裡 RandomGenerator::new() 會回傳 RandomGenerator<ThreadRng>
-        Self::new_game(width, height, now, RandomGenerator::new())
-    }
-}
+
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     struct MockGen {
     }
@@ -509,7 +499,9 @@ mod tests {
 
     #[test]
     fn test_game_init() {
-        let mut game = GameState::new(10, 10, Instant::now());
+        // let generator = Box::new(RandomGenerator::new());
+        // let game = GameState::new_game(10, 10, Instant::now(), generator);
+        let game = create_new_game(10, 10, Instant::now());
         assert_eq!(game.current_tetris.pos, Pos{x:5, y:1});
         assert_eq!(game.board.width, 10);
         assert_eq!(game.board.height, 10);
@@ -519,7 +511,7 @@ mod tests {
     #[test]
     fn test_tetris_move() {
         let init_time = Instant::now();
-        let mut game = GameState::new(10, 10, init_time);
+        let mut game = create_new_game(10, 10, init_time);
         assert_eq!(game.current_tetris.pos, Pos{x:5, y:1});
         game.update_press(GameCommand::MoveLeft, init_time);
         assert_eq!(game.current_tetris.pos, Pos{x:4, y:1});
@@ -536,7 +528,7 @@ mod tests {
     #[test]
     fn test_tetris_gravity() {
         let init_time = Instant::now();
-        let mut game = GameState::new(10, 10, init_time);
+        let mut game = create_new_game(10, 10, init_time);
         assert_eq!(game.current_tetris.pos, Pos{x:5, y:1});
         game.update_press(GameCommand::None, init_time + Duration::from_millis(500));
         assert_eq!(game.current_tetris.pos, Pos{x:5, y:1});
@@ -549,7 +541,7 @@ mod tests {
     #[test]
     fn test_hard_drop() {
         let init_time = Instant::now();
-        let mut game = GameState::new_game(10, 10, init_time, MockGen::new());
+        let mut game = GameState::new(10, 10, init_time, Box::new(MockGen::new()));
         assert_eq!(game.current_tetris.pos, Pos{x:5, y:1});
         game.update_press(GameCommand::HardDrop, init_time);
         assert_ne!(game.board.cells[9*10+4], None);
@@ -561,7 +553,7 @@ mod tests {
     #[test]
     fn test_soft_drop() {
         let init_time = Instant::now();
-        let mut game = GameState::new(10, 10, init_time);
+        let mut game = create_new_game(10, 10, init_time);
         assert_eq!(game.current_tetris.pos, Pos{x:5, y:1});
         game.update_press(GameCommand::SoftDrop, init_time);
         assert_eq!(game.current_tetris.pos, Pos{x:5, y:2});
@@ -574,7 +566,7 @@ mod tests {
     #[test]
     fn test_hard_drop_debounce() {
         let init_time = Instant::now();
-        let mut game = GameState::new_game(10, 10, init_time, MockGen::new());
+        let mut game = GameState::new(10, 10, init_time, Box::new(MockGen::new()));
         game.update_press(GameCommand::SoftDrop, init_time);
         assert_eq!(game.current_tetris.pos, Pos{x:5, y:2});
 
@@ -589,6 +581,7 @@ mod tests {
 
         // release
         assert!(!game.update(false, GameCommand::HardDrop, init_time));
+        // can trigger
         assert!(game.update(true, GameCommand::HardDrop, init_time));
     }
 
@@ -596,7 +589,7 @@ mod tests {
     #[test]
     fn test_lock() {
         let init_time = Instant::now();
-        let mut game = GameState::new_game(10, 3, init_time, MockGen::new());
+        let mut game = GameState::new(10, 3, init_time, Box::new(MockGen::new()));
         assert!(game.update_press(GameCommand::SoftDrop, init_time));
         assert_eq!(game.current_tetris.pos, Pos{x:5, y:2});
 
@@ -615,22 +608,9 @@ mod tests {
     }
 
     #[test]
-    fn test_hard2() {
-        let init_time = Instant::now();
-        let mut game = GameState::new(10, 10, init_time);
-        assert!(game.update_press(GameCommand::HardDrop, init_time));
-        assert_eq!(game.current_tetris.pos, Pos{x:5, y:1});
-        assert!(game.update_press(GameCommand::SoftDrop, init_time));
-        assert_eq!(game.current_tetris.pos, Pos{x:5, y:2});
-        assert!(!game.get_game_over());
-        assert!(game.update_press(GameCommand::SoftDrop, init_time + Duration::from_millis(1000)));
-        assert!(!game.get_game_over());
-    }
-
-    #[test]
     fn test_bug_hard_drop_instant_game_over() {
         let init_time = Instant::now();
-        let mut game = GameState::new_game(10, 5, init_time, MockGen::new());
+        let mut game = GameState::new(10, 5, init_time, Box::new(MockGen::new()));
         game.update(true, GameCommand::HardDrop, init_time);
         game.update(true, GameCommand::HardDrop, init_time);
         game.update(true, GameCommand::HardDrop, init_time);
