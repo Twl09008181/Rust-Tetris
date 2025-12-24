@@ -25,10 +25,10 @@ Board: Grid system with collision detection.
 
 ## File Structure    
 src/    
-├── main.rs          # Entry point: handles 60FPS loop and minifb window 
+├── main.rs          # Entry point: handles 60FPS loop and minifb window    
 ├── lib.rs           # Crate Root: defines the module tree and public factory    
-├── game.rs          # Core Logic: tetromino movement and shadow calculation   
-└── input.rs         # (Private) Internal state machines for DAS/ARR and Lock Delay    
+├── game.rs          # Core Logic: tetromino movement and shadow calculation      
+└── input.rs         # (Private) Internal state machines for DAS/ARR and Lock Delay      
 
 
 ## Control  
