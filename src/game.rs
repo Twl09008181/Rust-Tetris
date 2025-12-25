@@ -380,14 +380,6 @@ impl GameState {
             true
         }
     }
-    fn do_gravity(&mut self, now:Instant) -> Option<Tetromino> 
-    {
-        if !self.gravity.update(now) {
-            return None;
-        }
-        try_down(&self.board, &self.current_tetris)
-    }
-
     pub fn update(&mut self, press:bool, command:GameCommand, now:Instant) -> bool
     {
         if self.game_over {
@@ -418,24 +410,28 @@ impl GameState {
             res = true;
         }
 
+        // hard drop
         if(GameCommand::HardDrop == command) && res {
             self.game_over =  self.is_game_over();
             self.lock_mgr.reset();
             return true; 
         }
 
-        // check lock
-        if try_down(&self.board, &self.current_tetris).is_none() {
+        // check lock if we cannot move down
+        let Some(gravity_move) = try_down(&self.board, &self.current_tetris) else {
             self.lock_mgr.start_if_not(now);
             if self.lock_mgr.lock(now) {
                 self.lock_mgr.reset();
                 self.game_over =  self.is_game_over();
             }
             return res;
-        }
-        // still can go down, unlock the locking time
+        };
+        // unlock the locking time if we can move down
         self.lock_mgr.reset();
-        self.current_tetris = self.do_gravity(now).unwrap_or(self.current_tetris);
+        // check gravity timer
+        if self.gravity.update(now) {
+            self.current_tetris = gravity_move;
+        }
         res
     }
 
