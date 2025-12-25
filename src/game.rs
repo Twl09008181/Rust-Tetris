@@ -263,11 +263,17 @@ fn try_hard_drop(board:&Board, t:&Tetromino) -> Option<Tetromino>
 {
     let mut current_tetris = t.clone();
     loop {
-        if let Some(next_tetris) = try_down(&board, &current_tetris) {
-            current_tetris = next_tetris;
-        } else {
-            break Some(current_tetris)
-        }
+        // if let Some(next_tetris) = try_down(&board, &current_tetris) {
+        //     current_tetris = next_tetris;
+        // } else {
+        //     break Some(current_tetris)
+        // }
+
+        // or
+        let Some(next_tetris) = try_down(&board, &current_tetris) else {
+            break Some(current_tetris);
+        };
+        current_tetris = next_tetris;
     }
 }
 
@@ -364,6 +370,24 @@ impl GameState {
     }
 
 
+    fn is_game_over(&mut self) -> bool {
+        if self.board.try_place(&self.current_tetris) {
+            self.score += self.board.check_clear();
+            self.current_tetris = self.tetris_generator.next(self.board.width/2, 1);
+            self.shadow_out_of_date = true;
+            false
+        } else {
+            true
+        }
+    }
+    fn do_gravity(&mut self, now:Instant) -> Option<Tetromino> 
+    {
+        if !self.gravity.update(now) {
+            return None;
+        }
+        try_down(&self.board, &self.current_tetris)
+    }
+
     pub fn update(&mut self, press:bool, command:GameCommand, now:Instant) -> bool
     {
         if self.game_over {
@@ -394,29 +418,24 @@ impl GameState {
             res = true;
         }
 
-        let enable_hard = (GameCommand::HardDrop == command) && can_acntion;
-        let test_try_down = try_down(&self.board, &self.current_tetris).is_some();
-        if enable_hard || !test_try_down {
-            self.lock_mgr.start_if_not(now);
-            if enable_hard || self.lock_mgr.lock(now) {
-                if self.board.try_place(&self.current_tetris) {
-                    self.score += self.board.check_clear();
-                    self.current_tetris = self.tetris_generator.next(self.board.width/2, 1);
-                    self.shadow_out_of_date = true;
-                    self.lock_mgr.reset();
-                } else {
-                    // println!("game over??, try_down={test_try_down}, hard = {enable_hard}");
-                    self.game_over = true;
-                }
-            }
-        } else {//gravity
+        if(GameCommand::HardDrop == command) && res {
+            self.game_over =  self.is_game_over();
             self.lock_mgr.reset();
-            if self.gravity.update(now) {
-                if let Some(next_pos) = try_down(&self.board, &self.current_tetris) {
-                    self.current_tetris = next_pos;
-                }
-            }
+            return true; 
         }
+
+        // check lock
+        if try_down(&self.board, &self.current_tetris).is_none() {
+            self.lock_mgr.start_if_not(now);
+            if self.lock_mgr.lock(now) {
+                self.lock_mgr.reset();
+                self.game_over =  self.is_game_over();
+            }
+            return res;
+        }
+        // still can go down, unlock the locking time
+        self.lock_mgr.reset();
+        self.current_tetris = self.do_gravity(now).unwrap_or(self.current_tetris);
         res
     }
 

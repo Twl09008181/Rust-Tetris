@@ -49,24 +49,27 @@ impl MotionState {
                 true
             },
             KeyState::PRESS => {
-                if let Some(last_time) = self.last_time {
-                    if current_time.duration_since(last_time) > self.config.das_delay {
-                        self.last_time = Some(current_time);
-                        self.key_state = KeyState::DAS;
-                        return true;
-                    }
-                }
-                false
+                let Some(last_time) = self.last_time else {
+                    return false;
+                };
+                if current_time.duration_since(last_time) > self.config.das_delay {
+                    self.last_time = Some(current_time);
+                    self.key_state = KeyState::DAS;
+                    return true;
+                } 
+                 false
             },
             KeyState::DAS => {
-                if let Some(last_time) = self.last_time {
-                    if current_time.duration_since(last_time) > self.config.arr {
-                        self.last_time = Some(current_time);
-                        return true;
-                    }
+                let Some(last_time) = self.last_time else {
+                    return false;
+                };
+                if current_time.duration_since(last_time) > self.config.arr {
+                    self.last_time = Some(current_time);
+                    return true;
                 }
                 false
-            }}
+            }
+        }
     }
 }
 
@@ -111,12 +114,23 @@ impl LockMgr {
 
     pub fn lock(&self, now:Instant) -> bool 
     {
-        if let Some(start) = self.lock_start_time {
-            if now.duration_since(start) > self.lock_delay {
-                return true;
-            }
-        }
-        return false;
+
+        let Some(start) = self.lock_start_time else {
+            return false;
+        };
+
+        now.duration_since(start) > self.lock_delay
+
+
+
+        // or 
+
+        // if let Some(start) = self.lock_start_time {
+        //     if now.duration_since(start) > self.lock_delay {
+        //         return true;
+        //     }
+        // }
+        // return false;
     }
 }
 
